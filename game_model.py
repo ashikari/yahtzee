@@ -1,59 +1,41 @@
+from policy_model import State
 import torch
-from dataclasses import dataclass
 
 from score import score
 from policy_model import PolicyModel
 
-@dataclass
-class State:
-    dice: torch.Tensor
-    categories: torch.Tensor
-
-
 class Yahtzee(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, batch_size: int):
         super().__init__()
+        self.batch_size = batch_size
 
         self.policy_model = PolicyModel()
 
-    def forward(self, state: State):
-
-        state = self.get_initial_state()
-
-        reward, debug_info = self.play_game(state)
+    def forward(self):
+        reward, debug_info = self.play_game()
 
         return reward, debug_info
     
-    def update_state_round_idx(self, state, round_idx):
-        raise NotImplementedError
-    
-    def update_state_roll_idx(self, state, roll_idx):
-        raise NotImplementedError
-    
-    def play_game(self, initial_state: State):
+    def play_game(self):
 
-        state = initial_state
+        state = State()
 
         for round_idx in range(13):
-            state = self.update_state_round_idx(state, round_idx)
-            round_score = self.play_round(state)
-            score += round_score
-
-        return round_score
+            # set round index
+            state.round_index = round_idx
+            self.play_round(state)
 
     def play_round(self, state: State):
-        round_score = 0
-        for roll_idx in range(3):
-            state = self.update_state_roll_idx(state, roll_idx)
-            a = self.policy_model(state)
-            state = self.roll_dice(state, a)
-            
-            round_score += score(state)
+        state = self.roll_dice(state)
 
-        return round_score
+        for roll_idx in range(2):
+            state.rolls_remaining = 2 - roll_idx
+            a = self.policy_model(state.get_feature_vector())
+            state = self.roll_dice(state, a.dice_action)
+            
+            
+        a = self.category_policy_model(state.get_feature_vector())
+        state = self.select_categories(state, a.category_action)
     
-    def get_initial_state(self):
-        raise NotImplementedError
-    
-    def roll_dice(self, state: State):
+    def roll_dice(self, state: State, a: Action | None):
         raise NotImplementedError
