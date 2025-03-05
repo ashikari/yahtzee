@@ -1,17 +1,23 @@
 import torch
 from dataclasses import dataclass
 
+
 @dataclass
 class Action:
+    # indicates which dice to re-roll
     dice_action: torch.Tensor
+    # indicates which category to pick for that round
     category_action: torch.Tensor
+
 
 class State:
     def __init__(self, batch_size: int):
+        # current dice values encoded as the values of each die (ordered)
+        self.dice_state = torch.zeros((batch_size, 6), dtype=torch.float32)
         # current dice values encoded as histogram
         # shape: batch, 6 (num dice)
         # the value of each element in this tensor is the number of dice with the associated value
-        self.dice_state = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.dice_histagram = torch.zeros((batch_size, 6), dtype=torch.float32)
         # rolls remaining
         # shape: batch, 1
         # the value is the number of rolls remaining
@@ -31,7 +37,9 @@ class State:
         # values of current dice in each category
         # shape: batch, 6
         # value of the dice in each category
-        self.upper_section_current_dice_scores = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.upper_section_current_dice_scores = torch.zeros(
+            (batch_size, 6), dtype=torch.float32
+        )
         # which category are used
         # shape: batch, 6
         # value is 1 if the category was picked, value is 0 otherwise
@@ -58,7 +66,9 @@ class State:
         # chance
         # values of current dice in each category
         # shape: batch, 7
-        self.lower_section_current_dice_scores = torch.zeros((batch_size, 7), dtype=torch.float32)
+        self.lower_section_current_dice_scores = torch.zeros(
+            (batch_size, 7), dtype=torch.float32
+        )
         # which goals are used
         # shape: batch, 7
         self.lower_section_used = torch.zeros((batch_size, 7), dtype=torch.float32)
@@ -76,6 +86,7 @@ class State:
         return torch.cat(
             [
                 self.dice_state,
+                self.dice_histagram,
                 self.rolls_remaining,
                 self.round_index,
                 self.upper_section_current_dice_scores,
@@ -84,13 +95,14 @@ class State:
                 self.upper_bonus,
                 self.upper_score,
                 self.lower_section_current_dice_scores,
-                self.lower_section_used, 
+                self.lower_section_used,
                 self.lower_section_scores,
                 self.lower_score,
-                self.total_score
+                self.total_score,
             ],
-            dim=1
+            dim=1,
         )
+
 
 class PolicyModel(torch.nn.Module):
     def __init__(self):

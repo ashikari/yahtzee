@@ -2,6 +2,7 @@ import torch
 
 from game_model import Yahtzee
 
+
 class Trainer:
     def __init__(self, batch_size: int, num_steps: int, log_interval: int):
         self.model = Yahtzee(batch_size=batch_size)
@@ -21,9 +22,10 @@ class Trainer:
 
     def compute_loss(self, rewards, actions):
         raise NotImplementedError
-    
+
     def log(self, step, loss):
         raise NotImplementedError
+
 
 if __name__ == "__main__":
     trainer = Trainer(batch_size=10, num_steps=100, log_interval=10)
