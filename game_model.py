@@ -1,7 +1,8 @@
 from policy_model import State, Action
 from typing import Optional
 import torch
-from score import score
+from score import compute_scores
+
 from policy_model import PolicyModel
 
 
@@ -28,14 +29,18 @@ class Yahtzee(torch.nn.Module):
 
         for round_idx in range(self.num_rounds):
             # set round index
-            state.round_index = round_idx
+            state.round_index = torch.full(
+                (self.batch_size, 1), round_idx, device=state.dice_state.device
+            )
             self.play_round(state)
 
     def play_round(self, state: State):
         state = self.roll_dice(state)
 
         for roll_idx in range(2):
-            state.rolls_remaining = 2 - roll_idx
+            state.rolls_remaining = torch.full(
+                (self.batch_size, 1), 2 - roll_idx, device=state.dice_state.device
+            )
             a = self.policy_model(state.get_feature_vector())
             state = self.roll_dice(state, a.dice_action)
 

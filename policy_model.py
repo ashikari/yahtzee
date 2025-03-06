@@ -17,7 +17,7 @@ class State:
         # current dice values encoded as histogram
         # shape: batch, 6 (num dice)
         # the value of each element in this tensor is the number of dice with the associated value
-        self.dice_histagram = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.dice_histogram = torch.zeros((batch_size, 6), dtype=torch.float32)
         # rolls remaining
         # shape: batch, 1
         # the value is the number of rolls remaining
@@ -86,7 +86,7 @@ class State:
         return torch.cat(
             [
                 self.dice_state,
-                self.dice_histagram,
+                self.dice_histogram,
                 self.rolls_remaining,
                 self.round_index,
                 self.upper_section_current_dice_scores,

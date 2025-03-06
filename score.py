@@ -68,22 +68,21 @@ def chance(state: State) -> torch.Tensor:
     return state.dice_state.sum(dim=1, keepdim=True)
 
 
-def compute_scores(state: State) -> None:
-    batch_size = state.dice_state.shape[0]
-    # upper section scoring
+def compute_scores(state: State) -> State:
     state.upper_section_current_dice_scores = state.dice_histagram * torch.arange(
         1, 7
     ).reshape(1, 6)
 
     state.lower_section_current_dice_scores = torch.cat(
         [
-            three_of_a_kind(),
-            four_of_a_kind(),
-            full_house(),
-            small_straight(),
-            large_straight(),
-            yahtzee(),
-            chance(),
+            three_of_a_kind(state),
+            four_of_a_kind(state),
+            full_house(state),
+            small_straight(state),
+            large_straight(state),
+            yahtzee(state),
+            chance(state),
         ],
         dim=1,
     )
+    return state
