@@ -20,11 +20,6 @@ class Yahtzee(torch.nn.Module):
         self.policy_model = PolicyModel()
 
     def forward(self):
-        reward, debug_info = self.play_game()
-
-        return reward, debug_info
-
-    def play_game(self):
         state = State(self.batch_size)
 
         for round_idx in range(self.num_rounds):
