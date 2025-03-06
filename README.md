@@ -18,3 +18,4 @@ python trainer.py
 - [ ] Implement the Loss function
 - [ ] Enable GPU training
 - [ ] Implement UI for calculation mode
+- [ ] Move dataclasses for Action and State to another file
