@@ -1,0 +1,13 @@
+# Numerical and Scientific Computing
+numpy>=2.2.1
+pandas>=2.2.3
+
+# UI Dependencies (assuming you'll use tkinter which comes with Python)
+
+# Training Utils
+tqdm>=4.67.1
+
+# Optional but recommended for development
+pytest>=8.3.5
+black>=25.1.0
+flake8>=7.1.2
