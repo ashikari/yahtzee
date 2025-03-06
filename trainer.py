@@ -12,16 +12,17 @@ class Trainer:
         self.log_interval = log_interval
         # self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
-    def train(self):
-        start_time = time.time()
-        progress_bar = tqdm(
+        self.progress_bar = tqdm(
             range(self.num_steps),
             desc="Training Yahtzee",
             unit="step",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}]",
         )
 
-        for _ in progress_bar:
+    def train(self):
+        self.start_time = time.time()
+
+        for _ in self.progress_bar:
             self.model()
             # rewards, actions = self.model()
             # loss = self.compute_loss(rewards, actions)
@@ -29,26 +30,27 @@ class Trainer:
             # loss.backward()
             # self.optimizer.step()
 
-            # Update progress bar with metrics
-            elapsed = time.time() - start_time
-            progress_bar.set_postfix(
-                {
-                    "batch": self.model.batch_size,
-                    "elapsed": f"{elapsed:.2f}s",
-                    # 'loss': f'{loss.item():.4f}' if 'loss' in locals() else 'N/A',
-                    # 'avg_reward': f'{rewards.mean().item():.2f}' if 'rewards' in locals() else 'N/A'
-                }
-            )
-
             # if step % self.log_interval == 0:
             #     print(f"Step {step} completed")
-            # self.log(step, loss)
+            self.log()
 
     def compute_loss(self, rewards, actions):
         raise NotImplementedError
 
-    def log(self, step, loss):
-        raise NotImplementedError
+    def log(
+        self,
+        # loss
+    ):
+        # Update progress bar with metrics
+        elapsed = time.time() - self.start_time
+        self.progress_bar.set_postfix(
+            {
+                "batch": self.model.batch_size,
+                "elapsed": f"{elapsed:.2f}s",
+                # 'loss': f'{loss.item():.4f}' if 'loss' in locals() else 'N/A',
+                # 'avg_reward': f'{rewards.mean().item():.2f}' if 'rewards' in locals() else 'N/A'
+            }
+        )
 
 
 if __name__ == "__main__":
