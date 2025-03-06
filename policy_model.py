@@ -15,7 +15,7 @@ class Action:
         return Bernoulli(self.dice_action).sample()
 
     def sample_category_action(self):
-        return Categorical(logits=self.category_action).sample().item()
+        return Categorical(logits=self.category_action).sample()
 
 
 class State:

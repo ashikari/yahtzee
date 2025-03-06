@@ -19,7 +19,8 @@ class Yahtzee(torch.nn.Module):
         # initialize policy model
         self.policy_model = PolicyModel()
 
-    def forward(self):
+    # TODO: update outputs to return all necessary inputs to compute rewards
+    def forward(self) -> None:
         state = State(self.batch_size)
 
         for round_idx in range(self.num_rounds):
@@ -29,7 +30,7 @@ class Yahtzee(torch.nn.Module):
             )
             self.play_round(state)
 
-    def play_round(self, state: State):
+    def play_round(self, state: State) -> None:
         state = self.roll_dice(state)
 
         for roll_idx in range(2):
@@ -42,7 +43,10 @@ class Yahtzee(torch.nn.Module):
         a = self.policy_model(state.get_feature_vector())
         state = self.select_categories(state, a.sample_category_action())
 
-    def roll_dice(self, state: State, dice_action: Optional[Action] = None):
+    def select_categories(self, state: State, category_action: int) -> State:
+        pass
+
+    def roll_dice(self, state: State, dice_action: Optional[Action] = None) -> State:
         """
         Roll the dice according to the dice action mask.
 
