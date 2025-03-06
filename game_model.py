@@ -42,10 +42,10 @@ class Yahtzee(torch.nn.Module):
                 (self.batch_size, 1), 2 - roll_idx, device=state.dice_state.device
             )
             a = self.policy_model(state.get_feature_vector())
-            state = self.roll_dice(state, a.dice_action)
+            state = self.roll_dice(state, a.sample_dice_action())
 
         a = self.policy_model(state.get_feature_vector())
-        state = self.select_categories(state, a.category_action)
+        state = self.select_categories(state, a.sample_category_action())
 
     def roll_dice(self, state: State, dice_action: Optional[Action] = None):
         """
@@ -70,7 +70,9 @@ class Yahtzee(torch.nn.Module):
 
         # update dice state
         if dice_action is not None:
-            state.dice_state = torch.where(dice_action, new_rolls, state.dice_state)
+            state.dice_state = torch.where(
+                dice_action.bool(), new_rolls, state.dice_state
+            )
         else:
             state.dice_state = new_rolls
         torch.sort(state.dice_state, dim=1)

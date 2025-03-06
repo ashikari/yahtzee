@@ -1,6 +1,8 @@
 import torch
 from dataclasses import dataclass
 
+from torch.distributions import Bernoulli, Categorical
+
 
 @dataclass
 class Action:
@@ -8,6 +10,12 @@ class Action:
     dice_action: torch.Tensor
     # indicates which category to pick for that round
     category_action: torch.Tensor
+
+    def sample_dice_action(self):
+        return Bernoulli(self.dice_action).sample()
+
+    def sample_category_action(self):
+        return Categorical(logits=self.category_action).sample().item()
 
 
 class State:
@@ -108,5 +116,11 @@ class PolicyModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, state_vector: torch.Tensor):
-        raise NotImplementedError
+    def forward(self, state_vector: torch.Tensor) -> Action:
+        batch_size = state_vector.shape[0]
+
+        # dummy action where the dice are not rolled and the category is random
+        return Action(
+            dice_action=torch.zeros((batch_size, 5), dtype=torch.float32),
+            category_action=torch.rand((batch_size, 13), dtype=torch.float32),
+        )
