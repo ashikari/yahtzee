@@ -4,6 +4,8 @@ from game_model import Yahtzee
 from tqdm import tqdm
 import time
 
+import argparse
+
 
 class Trainer:
     def __init__(self, batch_size: int, num_steps: int, log_interval: int):
@@ -53,6 +55,19 @@ class Trainer:
         )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int)
+
+    args = parser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
-    trainer = Trainer(batch_size=10, num_steps=1000, log_interval=10)
+    args = parse_args()
+
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+
+    trainer = Trainer(batch_size=1, num_steps=1, log_interval=10)
     trainer.train()

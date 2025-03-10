@@ -41,10 +41,13 @@ class Yahtzee(torch.nn.Module):
             state = self.roll_dice(state, a.sample_dice_action())
 
         a = self.policy_model(state.get_feature_vector())
-        state = self.select_categories(state, a.sample_category_action())
+        state = self.select_categories(state, a)
 
-    def select_categories(self, state: State, category_action: int) -> State:
-        pass
+    def select_categories(self, state: State, action: Action) -> State:
+        # get action from category sample
+        category_action = action.sample_category_action(state)
+        state.update_state_with_action(category_action)
+        return state
 
     def roll_dice(self, state: State, dice_action: Optional[Action] = None) -> State:
         """
@@ -73,6 +76,7 @@ class Yahtzee(torch.nn.Module):
                 dice_action.bool(), new_rolls, state.dice_state
             )
         else:
+            # first roll in a round
             state.dice_state = new_rolls
         torch.sort(state.dice_state, dim=1)
 
