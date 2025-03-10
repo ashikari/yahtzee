@@ -23,16 +23,8 @@ class State:
         self.round_index = torch.full((batch_size, 1), 0, dtype=torch.float32)
         ## the current score sheet status
 
-        # upper section:
-        # Aces
-        # twos
-        # threes
-        # fours
-        # fives
-        # sixes
-        # values of current dice in each category
+        # upper section scores (Aces through Sixes)
         # shape: batch, 6
-        # value of the dice in each category
         self.upper_section_current_dice_scores = torch.zeros(
             (batch_size, 6), dtype=torch.float32
         )
@@ -52,15 +44,8 @@ class State:
         # batch, 1
         # value is the value of the upper section
         self.upper_score = torch.zeros((batch_size, 1), dtype=torch.float32)
-        # lower section:
-        # 3 of a kind
-        # 4 of a kind
-        # full house
-        # small straight
-        # large straight
-        # Yahtzee
-        # chance
-        # values of current dice in each category
+        # lower section scores for current dice (3 of a kind, 4 of a kind, full house,
+        # small straight, large straight, Yahtzee, chance)
         # shape: batch, 7
         self.lower_section_current_dice_scores = torch.zeros(
             (batch_size, 7), dtype=torch.float32
@@ -83,58 +68,86 @@ class State:
         self.total_score = torch.zeros((batch_size, 1), dtype=torch.float32)
 
     def get_action_mask(self) -> torch.Tensor:
+        """
+        Returns a boolean mask indicating which categories have already been used.
+        
+        The mask combines both upper and lower section usage information.
+        True values indicate categories that have been used, while False values
+        indicate categories that are still available for selection.
+        
+        Returns:
+            torch.Tensor: A boolean tensor with shape (batch_size, 13) where
+                         indices 0-5 represent upper section categories and
+                         indices 6-12 represent lower section categories.
+        """
         return torch.cat(
             [self.upper_section_used, self.lower_section_used], dim=-1
         ).bool()
 
     def update_state_with_action(self, category_action: torch.Tensor) -> None:
+        """
+        Updates the game state based on the selected category action.
+        
+        This method processes the category selection and updates all relevant
+        game state components including:
+        - Upper section scores and usage
+        - Lower section scores and usage
+        - Bonus calculations
+        - Total score
+        
+        Args:
+            category_action: Tensor containing the indices of selected categories
+                            (0-5 for upper section, 6-12 for lower section)
+        """
+        # Convert category indices to one-hot encoding
         selected_mask = F.one_hot(category_action, num_classes=13)
-        upper_selected_mask = selected_mask[:, :6]
-        lower_selected_mask = selected_mask[:, 6:]
-
-        # update upper section
-
-        # section used
+        upper_selected_mask = selected_mask[:, :6]  # Aces through Sixes
+        lower_selected_mask = selected_mask[:, 6:]  # 3-of-a-kind through Chance
+        
+        # Update upper section
         self.upper_section_used += upper_selected_mask
-
-        # section scores
         self.upper_section_scores += (
             upper_selected_mask * self.upper_section_current_dice_scores
         )
-
-        # upper bonus
-        upper_section_scores = torch.sum(
-            self.upper_section_scores, dim=-1, keepdim=True
-        )
-        self.upper_bonus = torch.sum(self.upper_section_scores, dim=-1, keepdim=True)
-
-        # upper score
-        self.upper_score = upper_section_scores + self.upper_bonus
-
-        # update lower section
-
-        # section used
+        
+        # Calculate upper section bonus (35 points if sum ≥ 63)
+        upper_section_sum = torch.sum(self.upper_section_scores, dim=-1, keepdim=True)
+        self.upper_bonus = (upper_section_sum >= 63).float() * 35
+        
+        # Calculate total upper section score
+        self.upper_score = upper_section_sum + self.upper_bonus
+        
+        # Update lower section
         self.lower_section_used += lower_selected_mask
-
-        # section scores
-        self.lower_section_scores = (
+        self.lower_section_scores += (
             lower_selected_mask * self.lower_section_current_dice_scores
         )
-
-        # yahtzee bonus
-        self.lower_bonus = (
-            50 * torch.max(self.lower_section_scores, keepdim=True, dim=-1).values > 1
+        
+        # Calculate Yahtzee bonus (50 points for each additional Yahtzee)
+        yahtzee_idx = 5  # Index of Yahtzee in lower section (0-indexed)
+        has_yahtzee_bonus = (
+            (self.lower_section_used[:, yahtzee_idx:yahtzee_idx+1] > 1) & 
+            (self.lower_section_scores[:, yahtzee_idx:yahtzee_idx+1] > 0)
         )
-
-        # lower score
+        self.lower_bonus = has_yahtzee_bonus.float() * 50
+        
+        # Calculate total lower section score
         self.lower_score = (
             self.lower_section_scores.sum(dim=-1, keepdim=True) + self.lower_bonus
         )
-
-        # total score
+        
+        # Calculate grand total
         self.total_score = self.upper_score + self.lower_score
-
     def get_feature_vector(self) -> torch.Tensor:
+        """
+        Constructs a feature vector representing the current game state.
+        
+        This method concatenates all relevant state information into a single tensor
+        that can be used as input to the policy model.
+        
+        Returns:
+            torch.Tensor: A concatenated tensor containing all state features
+        """
         return torch.cat(
             [
                 self.dice_state,
@@ -155,23 +168,34 @@ class State:
             dim=1,
         )
 
-
 @dataclass
 class Action:
     # indicates which dice to re-roll
     dice_action: torch.Tensor
-    # indicates which category to pick for that round
+    # Logits indicating which category to pick for that round
     category_action: torch.Tensor
 
     def sample_dice_action(self):
         return Bernoulli(self.dice_action).sample()
 
     def sample_category_action(self, state: State):
+        """
+        Samples a category action based on the current state.
+        
+        This method applies a mask to the category action logits to prevent selecting
+        categories that have already been used. It then samples from the resulting
+        categorical distribution to determine which category to select.
+        
+        Args:
+            state: The current game state containing information about used categories.
+            
+        Returns:
+            A tensor representing the sampled category action.
+        """
         mask = state.get_action_mask()
         self.category_action = self.category_action.masked_fill(mask, -1e9)
         category_action_sample = Categorical(logits=self.category_action).sample()
         return category_action_sample
-
 
 class PolicyModel(torch.nn.Module):
     def __init__(self):
