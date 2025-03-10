@@ -3,19 +3,7 @@ from dataclasses import dataclass
 
 from torch.distributions import Bernoulli, Categorical
 
-
-@dataclass
-class Action:
-    # indicates which dice to re-roll
-    dice_action: torch.Tensor
-    # indicates which category to pick for that round
-    category_action: torch.Tensor
-
-    def sample_dice_action(self):
-        return Bernoulli(self.dice_action).sample()
-
-    def sample_category_action(self):
-        return Categorical(logits=self.category_action).sample()
+import torch.nn.functional as F
 
 
 class State:
@@ -83,12 +71,68 @@ class State:
         # the values of the used scores
         # shape: batch, 7
         self.lower_section_scores = torch.zeros((batch_size, 7), dtype=torch.float32)
+        # Yahtzee Bonus
+        # shape: batch, 1
+        # value is the value of the score
+        self.lower_bonus = torch.zeros((batch_size, 1), dtype=torch.float32)
         # the total lower score
         # shape: batch, 1
         self.lower_score = torch.zeros((batch_size, 1), dtype=torch.float32)
         # the total score across top and bottom
         # shape: batch, 1
         self.total_score = torch.zeros((batch_size, 1), dtype=torch.float32)
+
+    def get_action_mask(self) -> torch.Tensor:
+        return torch.cat(
+            [self.upper_section_used, self.lower_section_used], dim=-1
+        ).bool()
+
+    def update_state_with_action(self, category_action: torch.Tensor) -> None:
+        selected_mask = F.one_hot(category_action, num_classes=13)
+        upper_selected_mask = selected_mask[:, :6]
+        lower_selected_mask = selected_mask[:, 6:]
+
+        # update upper section
+
+        # section used
+        self.upper_section_used += upper_selected_mask
+
+        # section scores
+        self.upper_section_scores += (
+            upper_selected_mask * self.upper_section_current_dice_scores
+        )
+
+        # upper bonus
+        upper_section_scores = torch.sum(
+            self.upper_section_scores, dim=-1, keepdim=True
+        )
+        self.upper_bonus = torch.sum(self.upper_section_scores, dim=-1, keepdim=True)
+
+        # upper score
+        self.upper_score = upper_section_scores + self.upper_bonus
+
+        # update lower section
+
+        # section used
+        self.lower_section_used += lower_selected_mask
+
+        # section scores
+        self.lower_section_scores = (
+            lower_selected_mask * self.lower_section_current_dice_scores
+        )
+
+        # yahtzee bonus
+        self.lower_bonus = (
+            50 * torch.max(self.lower_section_scores, keepdim=True, dim=-1).values > 1
+        )
+
+        # lower score
+        self.lower_score = (
+            self.lower_section_scores.sum(dim=-1, keepdim=True) + self.lower_bonus
+        )
+
+        # total score
+        self.total_score = self.upper_score + self.lower_score
 
     def get_feature_vector(self) -> torch.Tensor:
         return torch.cat(
@@ -110,6 +154,23 @@ class State:
             ],
             dim=1,
         )
+
+
+@dataclass
+class Action:
+    # indicates which dice to re-roll
+    dice_action: torch.Tensor
+    # indicates which category to pick for that round
+    category_action: torch.Tensor
+
+    def sample_dice_action(self):
+        return Bernoulli(self.dice_action).sample()
+
+    def sample_category_action(self, state: State):
+        mask = state.get_action_mask()
+        self.category_action = self.category_action.masked_fill(mask, -1e9)
+        category_action_sample = Categorical(logits=self.category_action).sample()
+        return category_action_sample
 
 
 class PolicyModel(torch.nn.Module):
