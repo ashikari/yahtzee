@@ -6,7 +6,7 @@ from policy_model import State
 from game_model import Yahtzee
 
 
-def create_yahtzee_scoresheet(num):
+def create_yahtzee_scoresheet(state: State):
     # Create a DataFrame with Yahtzee scoring categories
     categories = [
         "Ones",
@@ -48,16 +48,37 @@ def create_yahtzee_scoresheet(num):
                 "100 points per extra Yahtzee",
                 "Sum of all scores",
             ],
-            "Selected": [num for _ in categories],
-            "Scores": [num for _ in categories],
-            "Current Dice Scores": [num for _ in categories],
+            "Selected": [*state.upper_section_used.squeeze().tolist(), 0, *state.lower_section_used.squeeze().tolist(), 0, 0],
+            "Scores": [
+                *state.upper_section_scores.squeeze().tolist(),
+                state.upper_bonus.item(),
+                *state.lower_section_scores.squeeze().tolist(),
+                state.lower_bonus.item(),
+                state.total_score.item()
+            ],
+            "Current Dice Scores": [
+                *state.upper_section_current_dice_scores.squeeze().tolist(),
+                0,  # No current dice score for upper bonus
+                *state.lower_section_current_dice_scores.squeeze().tolist(),
+                0,  # No current dice score for Yahtzee bonus
+                0,  # No current dice score for total
+            ],
         }
     )
     return df
 
 
 def display_scoresheet(state: State):
-    return create_yahtzee_scoresheet(state.round_index.item()).to_html()
+    
+    # Calculate roll number (3 - rolls_remaining)
+    roll_number = 3 - state.rolls_remaining.item()
+    round_number = state.round_index.item() + 1  # Add 1 for human-readable round number
+    
+    # Create info text for roll and round
+    game_info = f"<h3>Round: {round_number}/13 | Roll: {roll_number}/3</h3>"
+    # Combine game info with scoresheet
+    combined_html = game_info + create_yahtzee_scoresheet(state).to_html()
+    return combined_html
 
 
 def setup_app():
@@ -89,7 +110,14 @@ def main():
         def refresh_scoresheet(current_index):
             next_index = current_index + 1
             state = states[current_index]
-            return display_scoresheet(state), next_index
+            # Check if we've reached the end of the states list
+            if next_index >= len(states):
+                next_index = 0  # Reset to beginning
+                gr.Warning("Reached the end of game states. Starting over.")
+            
+            combined_html = display_scoresheet(state) 
+
+            return combined_html, next_index
 
         refresh_btn.click(fn=refresh_scoresheet, inputs=index, outputs=[output, index])
 
