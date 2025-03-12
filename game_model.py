@@ -1,5 +1,5 @@
 from policy_model import State, Action
-from typing import Optional
+from typing import Optional, List
 import torch
 from score import compute_scores
 
@@ -20,7 +20,8 @@ class Yahtzee(torch.nn.Module):
         self.policy_model = PolicyModel()
 
     # TODO: update outputs to return all necessary inputs to compute rewards
-    def forward(self) -> None:
+    def forward(self) -> List[State]:
+        states = []
         state = State(self.batch_size)
 
         for round_idx in range(self.num_rounds):
@@ -28,20 +29,27 @@ class Yahtzee(torch.nn.Module):
             state.round_index = torch.full(
                 (self.batch_size, 1), round_idx, device=state.dice_state.device
             )
-            self.play_round(state)
+            round_states = self.play_round(state)
+            states.extend(round_states)
 
-    def play_round(self, state: State) -> None:
+        return states
+
+    def play_round(self, state: State) -> List[State]:
+        states = []
         state = self.roll_dice(state)
-
+        states.append(state.clone())
         for roll_idx in range(2):
             state.rolls_remaining = torch.full(
                 (self.batch_size, 1), 2 - roll_idx, device=state.dice_state.device
             )
             a = self.policy_model(state.get_feature_vector())
             state = self.roll_dice(state, a.sample_dice_action())
+            states.append(state.clone())
 
         a = self.policy_model(state.get_feature_vector())
         state = self.select_categories(state, a)
+        states.append(state.clone())
+        return states
 
     def select_categories(self, state: State, action: Action) -> State:
         # get action from category sample

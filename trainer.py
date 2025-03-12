@@ -58,6 +58,8 @@ class Trainer:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--num_steps", type=int, default=1)
 
     args = parser.parse_args()
     return args
@@ -69,5 +71,7 @@ if __name__ == "__main__":
     if args.seed is not None:
         torch.manual_seed(args.seed)
 
-    trainer = Trainer(batch_size=1, num_steps=1, log_interval=10)
+    trainer = Trainer(
+        batch_size=args.batch_size, num_steps=args.num_steps, log_interval=10
+    )
     trainer.train()
