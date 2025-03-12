@@ -1,9 +1,8 @@
-from policy_model import State, Action
+from state import State
+from policy_model import Action, PolicyModel
 from typing import Optional, List
 import torch
 from score import compute_scores
-
-from policy_model import PolicyModel
 
 
 class Yahtzee(torch.nn.Module):

@@ -1,7 +1,7 @@
 import gradio as gr
 import pandas as pd
 
-from policy_model import State
+from state import State
 
 from game_model import Yahtzee
 

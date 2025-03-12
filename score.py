@@ -1,4 +1,4 @@
-from policy_model import State
+from state import State
 import torch
 
 
