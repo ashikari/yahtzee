@@ -89,8 +89,67 @@ def display_scoresheet(state: State):
 
     # Create info text for roll and round
     game_info = f"<h3>Round: {round_number}/13 | Roll: {roll_number}/3</h3>"
-    # Combine game info with scoresheet
-    combined_html = game_info + create_yahtzee_scoresheet(state).to_html()
+
+    # Create dice display
+    dice_values = state.dice_state.squeeze().tolist()
+    dice_histogram = state.dice_histogram.squeeze().tolist()
+
+    # Format dice display as HTML
+    dice_html = f"""
+    <div style='margin-top: 20px; margin-bottom: 20px;'>
+        <h4>Current Dice:</h4>
+        <div style='display: flex; flex-direction: column; gap: 20px;'>
+            
+            <!-- Dice values section -->
+            <div>
+                <h5>Dice Values:</h5>
+                <div style='display: flex; gap: 10px;'>
+                    {
+        "".join(
+            [
+                f'<div style="width: 40px; height: 40px; background-color: blue; border: 1px solid black; display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: bold;">{int(die)}</div>'
+                for die in dice_values
+            ]
+        )
+    }
+                </div>
+            </div>
+            
+            <!-- Dice histogram section -->
+            <div>
+                <h5>Dice Histogram:</h5>
+                <div style='display: flex; gap: 10px;'>
+                    {
+        "".join(
+            [
+                f'''
+                    <div style='display: flex; flex-direction: column; align-items: center;'>
+                        <div style='width: 30px; height: 30px; background-color: blue; border: 1px solid black; display: flex; justify-content: center; align-items: center;'>{int(count)}</div>
+                        <div>{i + 1}</div>
+                    </div>'''
+                for i, count in enumerate(dice_histogram)
+            ]
+        )
+    }
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    """
+
+    # Wrap the scoresheet and dice display in a flex container
+    combined_html = f"""
+    {game_info}
+    <div style='display: flex; gap: 20px; align-items: flex-start;'>
+        <div style='flex: 2;'>
+            {create_yahtzee_scoresheet(state).to_html()}
+        </div>
+        <div style='flex: 1;'>
+            {dice_html}
+        </div>
+    </div>
+    """
     return combined_html
 
 

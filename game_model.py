@@ -86,13 +86,13 @@ class Yahtzee(torch.nn.Module):
         else:
             # first roll in a round
             state.dice_state = new_rolls
-        torch.sort(state.dice_state, dim=1)
+        state.dice_state, _ = torch.sort(state.dice_state, dim=1)
 
         # update dice histogram
-        state.dice_histagram = torch.zeros(
+        state.dice_histogram = torch.zeros(
             (self.batch_size, self.dice_sides), device=state.dice_state.device
         )
-        state.dice_histagram.scatter_add(
+        state.dice_histogram.scatter_add_(
             dim=1,
             index=state.dice_state - 1,
             src=torch.ones(
