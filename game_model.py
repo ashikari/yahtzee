@@ -37,16 +37,16 @@ class Yahtzee(torch.nn.Module):
     def play_round(self, state: State) -> List[State]:
         """
         Plays a single round of Yahtzee, consisting of up to three dice rolls followed by category selection.
-        
+
         A round consists of:
         1. First roll (all dice are rolled)
         2. Second roll (optional, player chooses which dice to re-roll)
         3. Third roll (optional, player chooses which dice to re-roll)
         4. Category selection (player selects which scoring category to use)
-        
+
         Args:
             state: The current game state
-            
+
         Returns:
             List[State]: A list of states representing each step in the round
         """
@@ -66,6 +66,7 @@ class Yahtzee(torch.nn.Module):
         state = self.select_categories(state, a)
         states.append(state.clone())
         return states
+
     def select_categories(self, state: State, action: Action) -> State:
         # get action from category sample
         category_action = action.sample_category_action(state)
