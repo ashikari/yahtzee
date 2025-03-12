@@ -48,13 +48,19 @@ def create_yahtzee_scoresheet(state: State):
                 "100 points per extra Yahtzee",
                 "Sum of all scores",
             ],
-            "Selected": [*state.upper_section_used.squeeze().tolist(), 0, *state.lower_section_used.squeeze().tolist(), 0, 0],
+            "Selected": [
+                *state.upper_section_used.squeeze().tolist(),
+                0,
+                *state.lower_section_used.squeeze().tolist(),
+                0,
+                0,
+            ],
             "Scores": [
                 *state.upper_section_scores.squeeze().tolist(),
                 state.upper_bonus.item(),
                 *state.lower_section_scores.squeeze().tolist(),
                 state.lower_bonus.item(),
-                state.total_score.item()
+                state.total_score.item(),
             ],
             "Current Dice Scores": [
                 *state.upper_section_current_dice_scores.squeeze().tolist(),
@@ -65,15 +71,22 @@ def create_yahtzee_scoresheet(state: State):
             ],
         }
     )
-    return df
+    # Apply styling to highlight non-zero values and format as integers
+    styled_df = df.style.map(
+        lambda x: "background-color: #90EE90"
+        if isinstance(x, (int, float)) and x != 0
+        else "background-color: black",
+        subset=["Scores", "Current Dice Scores", "Selected"],
+    ).format("{:.0f}", subset=["Scores", "Current Dice Scores", "Selected"])
+
+    return styled_df
 
 
 def display_scoresheet(state: State):
-    
     # Calculate roll number (3 - rolls_remaining)
     roll_number = 3 - state.rolls_remaining.item()
     round_number = state.round_index.item() + 1  # Add 1 for human-readable round number
-    
+
     # Create info text for roll and round
     game_info = f"<h3>Round: {round_number}/13 | Roll: {roll_number}/3</h3>"
     # Combine game info with scoresheet
@@ -114,8 +127,8 @@ def main():
             if next_index >= len(states):
                 next_index = 0  # Reset to beginning
                 gr.Warning("Reached the end of game states. Starting over.")
-            
-            combined_html = display_scoresheet(state) 
+
+            combined_html = display_scoresheet(state)
 
             return combined_html, next_index
 
