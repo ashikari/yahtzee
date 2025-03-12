@@ -60,7 +60,7 @@ def large_straight(state: State) -> torch.Tensor:
 
 def yahtzee(state: State) -> torch.Tensor:
     # Check for Yahtzee (all 5 dice showing the same value)
-    return (state.dice_histogram.sum(dim=1, keepdim=True) == 5) * 50
+    return (state.dice_histogram.max(dim=1, keepdim=True).values == 5) * 50
 
 
 def chance(state: State) -> torch.Tensor:
