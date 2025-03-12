@@ -1,4 +1,4 @@
-from policy_model import State
+from state import State
 import torch
 
 
@@ -60,7 +60,7 @@ def large_straight(state: State) -> torch.Tensor:
 
 def yahtzee(state: State) -> torch.Tensor:
     # Check for Yahtzee (all 5 dice showing the same value)
-    return (state.dice_histogram.sum(dim=1, keepdim=True) == 5) * 50
+    return (state.dice_histogram.max(dim=1, keepdim=True).values == 5) * 50
 
 
 def chance(state: State) -> torch.Tensor:
@@ -69,7 +69,7 @@ def chance(state: State) -> torch.Tensor:
 
 
 def compute_scores(state: State) -> State:
-    state.upper_section_current_dice_scores = state.dice_histagram * torch.arange(
+    state.upper_section_current_dice_scores = state.dice_histogram * torch.arange(
         1, 7
     ).reshape(1, 6)
 
