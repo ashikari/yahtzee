@@ -156,8 +156,8 @@ def display_scoresheet(state: State):
 def setup_app():
     gr.Markdown("# Yahtzee Scoresheet")
     output = gr.HTML()
-    refresh_btn = gr.Button("Show Scoresheet")
-    return output, refresh_btn
+    next_action_btn = gr.Button("Next Action")
+    return output, next_action_btn
 
 
 def main():
@@ -170,7 +170,7 @@ def main():
     states = game_model()
 
     with gr.Blocks() as demo:
-        output, refresh_btn = setup_app()
+        output, next_action_btn = setup_app()
 
         # Create a state variable to track the index
         index = gr.State(value=1)
@@ -191,7 +191,9 @@ def main():
 
             return combined_html, next_index
 
-        refresh_btn.click(fn=refresh_scoresheet, inputs=index, outputs=[output, index])
+        next_action_btn.click(
+            fn=refresh_scoresheet, inputs=index, outputs=[output, index]
+        )
 
     demo.launch()
 
