@@ -1,6 +1,8 @@
 import gradio as gr
 import pandas as pd
 
+from policy_model import State
+
 from game_model import Yahtzee
 
 
@@ -54,8 +56,8 @@ def create_yahtzee_scoresheet(num):
     return df
 
 
-def display_scoresheet(num):
-    return create_yahtzee_scoresheet(num).to_html()
+def display_scoresheet(state: State):
+    return create_yahtzee_scoresheet(state.round_index.item()).to_html()
 
 
 def setup_app():
@@ -77,14 +79,19 @@ def main():
     with gr.Blocks() as demo:
         output, refresh_btn = setup_app()
 
+        # Create a state variable to track the index
+        index = gr.State(value=1)
+
         # Initialize the scoresheet when the app starts
-        output.value = display_scoresheet(1)
+        output.value = display_scoresheet(states[0])
 
         # Update the scoresheet each time the button is clicked
-        def refresh_scoresheet(num):
-            return display_scoresheet(num)
+        def refresh_scoresheet(current_index):
+            next_index = current_index + 1
+            state = states[current_index]
+            return display_scoresheet(state), next_index
 
-        refresh_btn.click(fn=refresh_scoresheet, inputs=gr.Number(), outputs=output)
+        refresh_btn.click(fn=refresh_scoresheet, inputs=index, outputs=[output, index])
 
     demo.launch()
 

@@ -7,66 +7,93 @@ import torch.nn.functional as F
 
 
 class State:
-    def __init__(self, batch_size: int):
+    def __init__(self, batch_size: int, device: torch.device = torch.device("cpu")):
         self.batch_size = batch_size
+        self.device = device
         # current dice values encoded as the values of each die (ordered)
-        self.dice_state = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.dice_state = torch.zeros(
+            (batch_size, 6), dtype=torch.float32, device=device
+        )
         # current dice values encoded as histogram
         # shape: batch, 6 (num dice)
         # the value of each element in this tensor is the number of dice with the associated value
-        self.dice_histogram = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.dice_histogram = torch.zeros(
+            (batch_size, 6), dtype=torch.float32, device=device
+        )
         # rolls remaining
         # shape: batch, 1
         # the value is the number of rolls remaining
-        self.rolls_remaining = torch.full((batch_size, 1), 3, dtype=torch.float32)
+        self.rolls_remaining = torch.full(
+            (batch_size, 1), 3, dtype=torch.float32, device=device
+        )
 
         # round index
-        self.round_index = torch.full((batch_size, 1), 0, dtype=torch.float32)
+        self.round_index = torch.full(
+            (batch_size, 1), 0, dtype=torch.float32, device=device
+        )
         ## the current score sheet status
 
         # upper section scores (Aces through Sixes)
         # shape: batch, 6
         self.upper_section_current_dice_scores = torch.zeros(
-            (batch_size, 6), dtype=torch.float32
+            (batch_size, 6), dtype=torch.float32, device=device
         )
         # which category are used
         # shape: batch, 6
         # value is 1 if the category was picked, value is 0 otherwise
-        self.upper_section_used = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.upper_section_used = torch.zeros(
+            (batch_size, 6), dtype=torch.float32, device=device
+        )
         # the values of the used categories
         # shape: batch, 6
         # value is the value of the selected scores in each category
-        self.upper_section_scores = torch.zeros((batch_size, 6), dtype=torch.float32)
+        self.upper_section_scores = torch.zeros(
+            (batch_size, 6), dtype=torch.float32, device=device
+        )
         # the bonuses
         # shape: batch, 1
         # value is the value of the score
-        self.upper_bonus = torch.zeros((batch_size, 1), dtype=torch.float32)
+        self.upper_bonus = torch.zeros(
+            (batch_size, 1), dtype=torch.float32, device=device
+        )
         # the total top score
         # batch, 1
         # value is the value of the upper section
-        self.upper_score = torch.zeros((batch_size, 1), dtype=torch.float32)
+        self.upper_score = torch.zeros(
+            (batch_size, 1), dtype=torch.float32, device=device
+        )
         # lower section scores for current dice (3 of a kind, 4 of a kind, full house,
         # small straight, large straight, Yahtzee, chance)
         # shape: batch, 7
         self.lower_section_current_dice_scores = torch.zeros(
-            (batch_size, 7), dtype=torch.float32
+            (batch_size, 7), dtype=torch.float32, device=device
         )
         # which goals are used
         # shape: batch, 7
-        self.lower_section_used = torch.zeros((batch_size, 7), dtype=torch.float32)
+        self.lower_section_used = torch.zeros(
+            (batch_size, 7), dtype=torch.float32, device=device
+        )
         # the values of the used scores
         # shape: batch, 7
-        self.lower_section_scores = torch.zeros((batch_size, 7), dtype=torch.float32)
+        self.lower_section_scores = torch.zeros(
+            (batch_size, 7), dtype=torch.float32, device=device
+        )
         # Yahtzee Bonus
         # shape: batch, 1
         # value is the value of the score
-        self.lower_bonus = torch.zeros((batch_size, 1), dtype=torch.float32)
+        self.lower_bonus = torch.zeros(
+            (batch_size, 1), dtype=torch.float32, device=device
+        )
         # the total lower score
         # shape: batch, 1
-        self.lower_score = torch.zeros((batch_size, 1), dtype=torch.float32)
+        self.lower_score = torch.zeros(
+            (batch_size, 1), dtype=torch.float32, device=device
+        )
         # the total score across top and bottom
         # shape: batch, 1
-        self.total_score = torch.zeros((batch_size, 1), dtype=torch.float32)
+        self.total_score = torch.zeros(
+            (batch_size, 1), dtype=torch.float32, device=device
+        )
 
     def get_action_mask(self) -> torch.Tensor:
         """
@@ -170,7 +197,7 @@ class State:
         )
 
     def clone(self) -> "State":
-        cloned_state = State(batch_size=self.batch_size)
+        cloned_state = State(batch_size=self.batch_size, device=self.device)
         cloned_state.dice_state = torch.clone(self.dice_state)
         cloned_state.dice_histogram = torch.clone(self.dice_histogram)
         cloned_state.rolls_remaining = torch.clone(self.rolls_remaining)
@@ -192,6 +219,39 @@ class State:
         cloned_state.total_score = torch.clone(self.total_score)
 
         return cloned_state
+
+    def to(self, device: torch.device) -> "State":
+        """
+        Moves all tensors in the state to the specified device.
+
+        Args:
+            device: The target device to move tensors to
+
+        Returns:
+            self: The state object with all tensors moved to the specified device
+        """
+        self.device = device
+        self.dice_state = self.dice_state.to(device)
+        self.dice_histogram = self.dice_histogram.to(device)
+        self.rolls_remaining = self.rolls_remaining.to(device)
+        self.round_index = self.round_index.to(device)
+        self.upper_section_current_dice_scores = (
+            self.upper_section_current_dice_scores.to(device)
+        )
+        self.upper_section_used = self.upper_section_used.to(device)
+        self.upper_section_scores = self.upper_section_scores.to(device)
+        self.upper_bonus = self.upper_bonus.to(device)
+        self.upper_score = self.upper_score.to(device)
+        self.lower_section_current_dice_scores = (
+            self.lower_section_current_dice_scores.to(device)
+        )
+        self.lower_section_used = self.lower_section_used.to(device)
+        self.lower_section_scores = self.lower_section_scores.to(device)
+        self.lower_bonus = self.lower_bonus.to(device)
+        self.lower_score = self.lower_score.to(device)
+        self.total_score = self.total_score.to(device)
+
+        return self
 
 
 @dataclass
