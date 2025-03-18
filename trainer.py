@@ -111,7 +111,7 @@ if __name__ == "__main__":
     trainer = Trainer(
         batch_size=args.batch_size,
         num_steps=args.num_steps,
-        log_interval=10,
+        log_interval=25,
         use_gpu=args.use_gpu,
     )
     trainer.train()
