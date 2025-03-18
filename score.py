@@ -70,7 +70,7 @@ def chance(state: State) -> torch.Tensor:
 
 def compute_scores(state: State) -> State:
     state.upper_section_current_dice_scores = state.dice_histogram * torch.arange(
-        1, 7
+        1, 7, device=state.device
     ).reshape(1, 6)
 
     state.lower_section_current_dice_scores = torch.cat(

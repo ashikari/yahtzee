@@ -1,14 +1,15 @@
 from state import State
 from policy_model import Action, PolicyModel
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import torch
 from score import compute_scores
 
 
 class Yahtzee(torch.nn.Module):
-    def __init__(self, batch_size: int):
+    def __init__(self, batch_size: int, device: torch.device = torch.device("cpu")):
         super().__init__()
         self.batch_size = batch_size
+        self.device = device
 
         # Game params that do not change
         self.num_dice = 5
@@ -16,24 +17,42 @@ class Yahtzee(torch.nn.Module):
         self.dice_sides = 6
 
         # initialize policy model
-        self.policy_model = PolicyModel()
+        self.policy_model = PolicyModel().to(self.device)
 
-    # TODO: update outputs to return all necessary inputs to compute rewards
-    def forward(self) -> List[State]:
+    def forward(self) -> Tuple[List[State], List[Action]]:
+        """
+        Plays the entire game of Yahtzee.
+
+        Returns:
+            Tuple[List[State], List[Action]]: A tuple of a list of states representing each step in the round and a list of actions taken
+        """
         states = []
-        state = State(self.batch_size)
+        actions = []
+        state = State(self.batch_size, device=self.device)
 
         for round_idx in range(self.num_rounds):
             # set round index
             state.round_index = torch.full(
                 (self.batch_size, 1), round_idx, device=state.dice_state.device
             )
-            round_states = self.play_round(state)
+            round_states, round_actions = self.play_round(state)
             states.extend(round_states)
+            actions.extend(round_actions)
 
-        return states
+        # compute rewards
+        rewards = self.compute_rewards(states, actions)
 
-    def play_round(self, state: State) -> List[State]:
+        return states, actions, rewards
+
+    def compute_rewards(
+        self, states: List[State], actions: List[Action]
+    ) -> torch.Tensor:
+        """
+        Computes the rewards for the game.
+        """
+        return states[-1].total_score
+
+    def play_round(self, state: State) -> Tuple[List[State], List[Action]]:
         """
         Plays a single round of Yahtzee, consisting of up to three dice rolls followed by category selection.
 
@@ -47,9 +66,10 @@ class Yahtzee(torch.nn.Module):
             state: The current game state
 
         Returns:
-            List[State]: A list of states representing each step in the round
+            Tuple[List[State], List[Action]]: A tuple of a list of states representing each step in the round and a list of actions taken
         """
         states = []
+        actions = []
 
         # first roll
         state = self.roll_dice(state)
@@ -59,14 +79,26 @@ class Yahtzee(torch.nn.Module):
         for _ in range(1, 3):
             a = self.policy_model(state.get_feature_vector())
             state = self.roll_dice(state, a.sample_dice_action())
+            actions.append(a.clone())
             states.append(state.clone())
 
         a = self.policy_model(state.get_feature_vector())
         state = self.select_categories(state, a)
+        actions.append(a.clone())
         states.append(state.clone())
-        return states
+        return states, actions
 
     def select_categories(self, state: State, action: Action) -> State:
+        """
+        Selects the categories for the current round.
+
+        Args:
+            state: The current game state
+            action: The action to select categories
+
+        Returns:
+            Updated state with selected categories
+        """
         # get action from category sample
         category_action = action.sample_category_action(state)
         state.update_state_with_action(category_action)
