@@ -11,13 +11,18 @@ from state import State
 
 @dataclass
 class Action:
-    # indicates which dice to re-roll
+    # Logits indicates which dice to re-roll
     dice_action: torch.Tensor
     # Logits indicating which category to pick for that round
     category_action: torch.Tensor
+    dice_action_log_prob: torch.Tensor = None
+    category_action_log_prob: torch.Tensor = None
 
     def sample_dice_action(self):
-        return Bernoulli(logits=self.dice_action).sample()
+        distribution = Bernoulli(logits=self.dice_action)
+        dice_action_sample = distribution.sample()
+        self.dice_action_log_prob = distribution.log_prob(dice_action_sample)
+        return dice_action_sample
 
     def sample_category_action(self, state: State):
         """
@@ -35,13 +40,21 @@ class Action:
         """
         mask = state.get_action_mask()
         self.category_action = self.category_action.masked_fill(mask, -1e9)
-        category_action_sample = Categorical(logits=self.category_action).sample()
+        distribution = Categorical(logits=self.category_action)
+        category_action_sample = distribution.sample()
+        self.category_action_log_prob = distribution.log_prob(category_action_sample)
         return category_action_sample
 
     def clone(self) -> "Action":
         return Action(
             dice_action=self.dice_action.clone(),
             category_action=self.category_action.clone(),
+            dice_action_log_prob=self.dice_action_log_prob.clone()
+            if self.dice_action_log_prob is not None
+            else None,
+            category_action_log_prob=self.category_action_log_prob.clone()
+            if self.category_action_log_prob is not None
+            else None,
         )
 
 

@@ -4,6 +4,9 @@ from game_model import Yahtzee
 from tqdm import tqdm
 import time
 
+from state import State
+from typing import List
+
 import argparse
 
 
@@ -32,30 +35,54 @@ class Trainer:
     def train(self):
         self.start_time = time.time()
 
-        for _ in self.progress_bar:
+        for step in self.progress_bar:
             states, actions, rewards = self.model()
-            # loss = self.compute_loss(rewards, actions)
-            # self.optimizer.zero_grad()
-            # loss.backward()
-            # self.optimizer.step()
+            loss = self.compute_loss(rewards, actions)
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
-            # if step % self.log_interval == 0:
-            #     print(f"Step {step} completed")
-            self.log()
+            if step % self.log_interval == 0:
+                self.log(states)
 
     def compute_loss(self, rewards, actions):
-        raise NotImplementedError
+        dice_actions_log_probs = torch.cat(
+            [
+                a.dice_action_log_prob
+                for a in actions
+                if a.dice_action_log_prob is not None
+            ],
+            dim=1,
+        )
+        category_actions_log_probs = torch.stack(
+            [
+                a.category_action_log_prob
+                for a in actions
+                if a.category_action_log_prob is not None
+            ],
+            dim=-1,
+        )
+        action_log_probs = torch.cat(
+            [dice_actions_log_probs, category_actions_log_probs], dim=1
+        )
+        action_log_probs = action_log_probs.sum(dim=1)
+        normalized_rewards = rewards - rewards.mean(dim=0)
+        loss = -action_log_probs * normalized_rewards.detach().squeeze()
+        return loss.mean()
 
     def log(
         self,
+        states: List[State],
         # loss
     ):
+        average_score = states[-1].total_score.mean(dim=0).item()
         # Update progress bar with metrics
         elapsed = time.time() - self.start_time
         self.progress_bar.set_postfix(
             {
                 "batch": self.model.batch_size,
                 "elapsed": f"{elapsed:.2f}s",
+                "Average Total Score": average_score,
                 # 'loss': f'{loss.item():.4f}' if 'loss' in locals() else 'N/A',
                 # 'avg_reward': f'{rewards.mean().item():.2f}' if 'rewards' in locals() else 'N/A'
             }
