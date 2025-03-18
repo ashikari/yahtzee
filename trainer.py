@@ -23,7 +23,7 @@ class Trainer:
             self.model = torch.compile(self.model, backend="aot_eager")
         self.num_steps = num_steps
         self.log_interval = log_interval
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.0001)
 
         self.progress_bar = tqdm(
             range(self.num_steps),
@@ -43,39 +43,78 @@ class Trainer:
             self.optimizer.step()
 
             if step % self.log_interval == 0:
-                self.log(states)
+                self.log(states, loss, rewards)
 
     def compute_loss(self, rewards, actions):
-        dice_actions_log_probs = torch.cat(
-            [
-                a.dice_action_log_prob
-                for a in actions
-                if a.dice_action_log_prob is not None
-            ],
-            dim=1,
+        device = rewards.device
+        # Extract action log probabilities and their indices
+        action_log_probs, action_indices = self._extract_action_log_probs(
+            actions, device
         )
-        category_actions_log_probs = torch.stack(
-            [
-                a.category_action_log_prob
-                for a in actions
-                if a.category_action_log_prob is not None
-            ],
-            dim=-1,
+
+        # Get filtered rewards based on valid action indices
+        filtered_rewards = self._get_filtered_rewards(rewards, action_indices)
+
+        # Normalize rewards
+        normalized_rewards = filtered_rewards - filtered_rewards.mean(dim=0)
+
+        # Compute cumulative future rewards
+        cumulative_rewards = self._compute_cumulative_rewards(normalized_rewards)
+
+        # Calculate loss using policy gradient approach
+        loss = -action_log_probs * cumulative_rewards.detach()
+        return loss.sum(dim=1).mean()
+
+    def _extract_action_log_probs(self, actions, device=torch.device("cpu")):
+        """Extract log probabilities from valid actions and track their indices."""
+        action_vector = []
+        action_indices = []
+
+        # Create tensors to store action types and their log probabilities
+        for a_idx, action in enumerate(actions):
+            # Skip actions with no log probabilities
+            if (
+                action.dice_action_log_prob is None
+                and action.category_action_log_prob is None
+            ):
+                continue
+
+            if action.dice_action_log_prob is not None:
+                action_vector.append(
+                    action.dice_action_log_prob.sum(dim=1, keepdim=True)
+                )
+            elif action.category_action_log_prob is not None:
+                action_vector.append(action.category_action_log_prob.unsqueeze(1))
+
+            action_indices.append(a_idx)
+
+        return torch.cat(action_vector, dim=1), torch.tensor(
+            action_indices, device=device
         )
-        action_log_probs = torch.cat(
-            [dice_actions_log_probs, category_actions_log_probs], dim=1
-        )
-        action_log_probs = action_log_probs.sum(dim=1)
-        normalized_rewards = rewards - rewards.mean(dim=0)
-        loss = -action_log_probs * normalized_rewards.detach().squeeze()
-        return loss.mean()
+
+    def _get_filtered_rewards(self, rewards, action_indices):
+        """Filter rewards to only include those corresponding to valid actions."""
+        return torch.index_select(rewards, dim=1, index=action_indices)
+
+    def _compute_cumulative_rewards(self, rewards):
+        """Compute cumulative future rewards for each timestep."""
+        _, steps = rewards.shape
+        indices = torch.arange(steps, device=rewards.device)
+
+        # Create a mask where each element (i,j) is 1 if j >= i (lower triangular matrix)
+        mask = indices.unsqueeze(0) <= indices.unsqueeze(1)
+
+        # Matrix multiplication to efficiently compute cumulative future rewards
+        return torch.matmul(rewards, mask.float())
 
     def log(
         self,
         states: List[State],
-        # loss
+        loss: torch.Tensor,
+        rewards: torch.Tensor,
     ):
         average_score = states[-1].total_score.mean(dim=0).item()
+        median_score = states[-1].total_score.median(dim=0).values.item()
         # Update progress bar with metrics
         elapsed = time.time() - self.start_time
         self.progress_bar.set_postfix(
@@ -83,8 +122,9 @@ class Trainer:
                 "batch": self.model.batch_size,
                 "elapsed": f"{elapsed:.2f}s",
                 "Average Total Score": average_score,
-                # 'loss': f'{loss.item():.4f}' if 'loss' in locals() else 'N/A',
-                # 'avg_reward': f'{rewards.mean().item():.2f}' if 'rewards' in locals() else 'N/A'
+                "Median Total Score": median_score,
+                "Average Reward": f"{rewards.mean().item():.2f}",
+                "loss": f"{loss.item():.4f}",
             }
         )
 

@@ -48,9 +48,30 @@ class Yahtzee(torch.nn.Module):
         self, states: List[State], actions: List[Action]
     ) -> torch.Tensor:
         """
-        Computes the rewards for the game.
+        Computes the rewards for the game based on score changes and final score.
+
+        Args:
+            states: List[State] - A list of game states at each step
+            actions: List[Action] - A list of actions taken at each step
+
+        Returns:
+            torch.Tensor: Rewards tensor with shape (batch_size, num_steps) where:
+                - Each row represents a game instance in the batch
+                - Each column represents the reward at a particular step
+                - Rewards are based on score increases between states and a large
+                  bonus for the final score
         """
-        return states[-1].total_score
+
+        total_scores = [state.total_score for state in states]
+        total_scores = torch.cat(total_scores, dim=1)
+        # Calculate score deltas (negative because we want to reward increases)
+        score_delta = torch.zeros_like(total_scores)
+        score_delta[:, 1:] = total_scores[:, 1:] - total_scores[:, :-1]
+
+        final_score_reward = torch.zeros_like(total_scores)
+        final_score_reward[:, -1] = total_scores[:, -1]
+
+        return score_delta + final_score_reward
 
     def play_round(self, state: State) -> Tuple[List[State], List[Action]]:
         """
@@ -73,13 +94,16 @@ class Yahtzee(torch.nn.Module):
 
         # first roll
         state = self.roll_dice(state)
+        # TODO: remove this logging outside of debug mode
         states.append(state.clone())
+        actions.append(Action(None, None, None))
 
         # second and third rolls
         for _ in range(1, 3):
             a = self.policy_model(state.get_feature_vector())
             state = self.roll_dice(state, a.sample_dice_action())
             actions.append(a.clone())
+            # TODO: remove this logging outside of debug mode
             states.append(state.clone())
 
         a = self.policy_model(state.get_feature_vector())
@@ -118,10 +142,13 @@ class Yahtzee(torch.nn.Module):
             Updated state with new dice values
         """
         # simulate rolling all 5 dice.
+        # Generate all dice rolls at once for better GPU parallelization
+        # Using float32 directly avoids type conversion later
         new_rolls = torch.randint(
             1,
             self.dice_sides + 1,
             (self.batch_size, self.num_dice),
+            dtype=torch.float32,  # Match target dtype to avoid conversion
             device=state.dice_state.device,
         )
 
@@ -145,7 +172,7 @@ class Yahtzee(torch.nn.Module):
         )
         state.dice_histogram.scatter_add_(
             dim=1,
-            index=state.dice_state - 1,
+            index=state.dice_state.long() - 1,
             src=torch.ones(
                 state.dice_state.shape,
                 dtype=torch.float32,
