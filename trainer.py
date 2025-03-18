@@ -8,11 +8,19 @@ import argparse
 
 
 class Trainer:
-    def __init__(self, batch_size: int, num_steps: int, log_interval: int):
-        self.model = Yahtzee(batch_size=batch_size)
+    def __init__(
+        self, batch_size: int, num_steps: int, log_interval: int, use_gpu: bool = False
+    ):
+        device = torch.device(
+            "mps:0" if torch.backends.mps.is_available() and use_gpu else "cpu"
+        )
+        self.model = Yahtzee(batch_size=batch_size, device=device)
+        if device == torch.device("mps:0"):
+            print("Compiling model")
+            self.model = torch.compile(self.model, backend="aot_eager")
         self.num_steps = num_steps
         self.log_interval = log_interval
-        # self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
         self.progress_bar = tqdm(
             range(self.num_steps),
@@ -25,8 +33,7 @@ class Trainer:
         self.start_time = time.time()
 
         for _ in self.progress_bar:
-            self.model()
-            # rewards, actions = self.model()
+            states, actions, rewards = self.model()
             # loss = self.compute_loss(rewards, actions)
             # self.optimizer.zero_grad()
             # loss.backward()
@@ -60,6 +67,9 @@ def parse_args():
     parser.add_argument("--seed", type=int)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_steps", type=int, default=1)
+    parser.add_argument(
+        "--use_gpu", action="store_true", help="Use GPU for training if available"
+    )
 
     args = parser.parse_args()
     return args
@@ -72,6 +82,9 @@ if __name__ == "__main__":
         torch.manual_seed(args.seed)
 
     trainer = Trainer(
-        batch_size=args.batch_size, num_steps=args.num_steps, log_interval=10
+        batch_size=args.batch_size,
+        num_steps=args.num_steps,
+        log_interval=10,
+        use_gpu=args.use_gpu,
     )
     trainer.train()

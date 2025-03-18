@@ -248,3 +248,30 @@ class State:
         self.total_score = self.total_score.to(device)
 
         return self
+
+    @staticmethod
+    def get_feature_length() -> int:
+        """
+        Calculates the total length of the feature vector.
+
+        This method computes the sum of the second dimension sizes of all tensors
+        that are concatenated in the get_feature_vector method.
+
+        Returns:
+            int: The total length of the feature vector
+        """
+        # Dice state: 6
+        # Dice histogram: 6
+        # Rolls remaining: 1
+        # Round index: 1
+        # Upper section current dice scores: 6
+        # Upper section used: 6
+        # Upper section scores: 6
+        # Upper bonus: 1
+        # Upper score: 1
+        # Lower section current dice scores: 7
+        # Lower section used: 7
+        # Lower section scores: 7
+        # Lower score: 1
+        # Total score: 1
+        return 6 + 6 + 1 + 1 + 6 + 6 + 6 + 1 + 1 + 7 + 7 + 7 + 1  # Total: 57
