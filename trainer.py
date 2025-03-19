@@ -16,7 +16,15 @@ wandb.login()
 
 class Trainer:
     def __init__(
-        self, batch_size: int, num_steps: int, log_interval: int, use_gpu: bool = False
+        self,
+        batch_size: int,
+        num_steps: int,
+        log_interval: int,
+        use_gpu: bool = False,
+        initial_lr: float = 0.001,
+        lr_schedule: str = "constant",
+        decay_rate: float = 0.9,
+        step_size: int = 1000,
     ):
         device = torch.device(
             "mps:0" if torch.backends.mps.is_available() and use_gpu else "cpu"
@@ -28,7 +36,22 @@ class Trainer:
 
         self.num_steps = num_steps
         self.log_interval = log_interval
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.0001)
+        self.initial_lr = initial_lr
+        self.lr_schedule = lr_schedule
+
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=initial_lr)
+
+        # Set up learning rate scheduler based on the chosen schedule
+        if lr_schedule == "exponential":
+            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                self.optimizer, gamma=decay_rate
+            )
+        elif lr_schedule == "step":
+            self.scheduler = torch.optim.lr_scheduler.StepLR(
+                self.optimizer, step_size=step_size, gamma=decay_rate
+            )
+        else:  # "constant" or any other value
+            self.scheduler = None
 
         self.progress_bar = tqdm(
             range(self.num_steps),
@@ -47,6 +70,10 @@ class Trainer:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+
+            # Update learning rate according to schedule
+            if self.scheduler is not None:
+                self.scheduler.step()
 
             if step % self.log_interval == 0:
                 self.log(step, states, loss, rewards)
@@ -126,6 +153,7 @@ class Trainer:
         max_reward = rewards.max().item()
         min_reward = rewards.min().item()
         loss = loss.item()
+        current_lr = self.optimizer.param_groups[0]["lr"]
 
         # Update progress bar with metrics
         elapsed = time.time() - self.start_time
@@ -137,12 +165,14 @@ class Trainer:
             "Max Reward": max_reward,
             "Min Reward": min_reward,
             "loss": loss,
+            "learning_rate": current_lr,
         }
 
         wandb.log(log_dict, step=step)
         local_log_dict = {
             "batch": self.model.batch_size,
             "elapsed": f"{elapsed:.2f}s",
+            "lr": f"{current_lr:.6f}",
         }
         local_log_dict.update(log_dict)
 
@@ -156,6 +186,25 @@ def parse_args():
     parser.add_argument("--num_steps", type=int, default=1)
     parser.add_argument(
         "--use_gpu", action="store_true", help="Use GPU for training if available"
+    )
+    parser.add_argument(
+        "--initial_lr", type=float, default=0.001, help="Initial learning rate"
+    )
+    parser.add_argument(
+        "--lr_schedule",
+        type=str,
+        default="constant",
+        choices=["constant", "exponential", "step"],
+        help="Learning rate schedule type",
+    )
+    parser.add_argument(
+        "--decay_rate",
+        type=float,
+        default=0.9,
+        help="Decay rate for learning rate schedules",
+    )
+    parser.add_argument(
+        "--step_size", type=int, default=4000, help="Step size for step decay schedule"
     )
 
     args = parser.parse_args()
@@ -176,5 +225,9 @@ if __name__ == "__main__":
             num_steps=config.num_steps,
             log_interval=25,
             use_gpu=config.use_gpu,
+            initial_lr=config.initial_lr,
+            lr_schedule=config.lr_schedule,
+            decay_rate=config.decay_rate,
+            step_size=config.step_size,
         )
         trainer.train()
