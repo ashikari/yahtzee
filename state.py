@@ -8,7 +8,7 @@ class State:
         self.device = device
         # current dice values encoded as the values of each die (ordered)
         self.dice_state = torch.zeros(
-            (batch_size, 6), dtype=torch.float32, device=device
+            (batch_size, 5), dtype=torch.float32, device=device
         )
         # current dice values encoded as histogram
         # shape: batch, 6 (num dice)
