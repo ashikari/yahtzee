@@ -41,7 +41,7 @@ class Trainer:
         step_size: int = 1000,
         policy_loss_coefficient: float = 100.0,
         value_loss_coefficient: float = 0.01,
-        entropy_loss_coefficient: float = 100.0,
+        entropy_loss_coefficient: float = 0.01,
     ):
         device = torch.device(
             "mps:0" if torch.backends.mps.is_available() and use_gpu else "cpu"
@@ -280,6 +280,18 @@ def parse_args():
         type=float,
         default=0.01,
         help="Coefficient for entropy regularization",
+    )
+    parser.add_argument(
+        "--policy_loss_coefficient",
+        type=float,
+        default=100.0,
+        help="Coefficient for policy loss",
+    )
+    parser.add_argument(
+        "--value_loss_coefficient",
+        type=float,
+        default=0.01,
+        help="Coefficient for value loss",
     )
 
     args = parser.parse_args()
