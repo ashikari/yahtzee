@@ -14,6 +14,20 @@ import wandb
 wandb.login()
 
 
+class Loss:
+    def __init__(
+        self,
+        total_loss: torch.Tensor,
+        policy_loss: torch.Tensor,
+        value_loss: torch.Tensor,
+        entropy_loss: torch.Tensor = None,
+    ):
+        self.total_loss = total_loss
+        self.policy_loss = policy_loss
+        self.value_loss = value_loss
+        self.entropy_loss = entropy_loss
+
+
 class Trainer:
     def __init__(
         self,
@@ -25,6 +39,9 @@ class Trainer:
         lr_schedule: str = "constant",
         decay_rate: float = 0.9,
         step_size: int = 1000,
+        policy_loss_coefficient: float = 100.0,
+        value_loss_coefficient: float = 0.01,
+        entropy_loss_coefficient: float = 100.0,
     ):
         device = torch.device(
             "mps:0" if torch.backends.mps.is_available() and use_gpu else "cpu"
@@ -38,7 +55,9 @@ class Trainer:
         self.log_interval = log_interval
         self.initial_lr = initial_lr
         self.lr_schedule = lr_schedule
-
+        self.policy_loss_coefficient = policy_loss_coefficient
+        self.value_loss_coefficient = value_loss_coefficient
+        self.entropy_loss_coefficient = entropy_loss_coefficient
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=initial_lr)
 
         # Set up learning rate scheduler based on the chosen schedule
@@ -65,10 +84,10 @@ class Trainer:
         self.start_time = time.time()
 
         for step in self.progress_bar:
-            states, actions, rewards = self.model()
-            loss = self.compute_loss(rewards, actions)
+            states, actions, values, rewards = self.model()
+            loss = self.compute_loss(rewards, actions, values)
             self.optimizer.zero_grad()
-            loss.backward()
+            loss.total_loss.backward()
             self.optimizer.step()
 
             # Update learning rate according to schedule
@@ -76,31 +95,59 @@ class Trainer:
                 self.scheduler.step()
 
             if step % self.log_interval == 0:
-                self.log(step, states, loss, rewards)
+                self.log(step, states, values, loss, rewards)
 
-    def compute_loss(self, rewards, actions):
+    def compute_loss(self, rewards, actions, values):
         device = rewards.device
         # Extract action log probabilities and their indices
-        action_log_probs, action_indices = self._extract_action_log_probs(
-            actions, device
+        action_log_probs, action_entropy, action_indices = (
+            self._extract_action_probs_and_entropy(actions, device)
         )
 
         # Get filtered rewards based on valid action indices
         filtered_rewards = self._get_filtered_rewards(rewards, action_indices)
 
-        # Normalize rewards
-        normalized_rewards = filtered_rewards - filtered_rewards.mean(dim=0)
-
         # Compute cumulative future rewards
-        cumulative_rewards = self._compute_cumulative_rewards(normalized_rewards)
+        cumulative_rewards = self._compute_cumulative_rewards(filtered_rewards)
 
-        # Calculate loss using policy gradient approach
-        loss = -action_log_probs * cumulative_rewards.detach()
-        return loss.sum(dim=1).mean()
+        # Value loss calculation using PyTorch's built-in Huber loss
+        huber_loss = torch.nn.HuberLoss(reduction="none")
+        value_loss = huber_loss(values, cumulative_rewards.detach())
+        value_loss = value_loss.sum(dim=1).mean()
 
-    def _extract_action_log_probs(self, actions, device=torch.device("cpu")):
+        # Add a baseline subtraction here
+        advantages = cumulative_rewards - values.detach()
+        # normalize advantages
+        advantages = (advantages - advantages.mean(dim=0)) / advantages.std(dim=0)
+
+        # Use advantages for policy loss
+        # policy_loss = -action_log_probs * advantages.detach()
+        policy_loss = -action_log_probs * (
+            cumulative_rewards.detach() - cumulative_rewards.mean(dim=0).detach()
+        )
+        policy_loss = policy_loss.sum(dim=1).mean()
+
+        # Add entropy regularization
+        entropy_loss = -action_entropy
+        entropy_loss = entropy_loss.sum(dim=1).mean()
+
+        total_loss = (
+            self.policy_loss_coefficient * policy_loss
+            + self.value_loss_coefficient * value_loss
+            + self.entropy_loss_coefficient * entropy_loss
+        )
+
+        return Loss(
+            total_loss=total_loss,
+            policy_loss=policy_loss,
+            value_loss=value_loss,
+            entropy_loss=entropy_loss,
+        )
+
+    def _extract_action_probs_and_entropy(self, actions, device=torch.device("cpu")):
         """Extract log probabilities from valid actions and track their indices."""
         action_vector = []
+        action_entropy = []
         action_indices = []
 
         # Create tensors to store action types and their log probabilities
@@ -116,13 +163,19 @@ class Trainer:
                 action_vector.append(
                     action.dice_action_log_prob.sum(dim=1, keepdim=True)
                 )
+                action_entropy.append(
+                    action.dice_action_entropy.sum(dim=1, keepdim=True)
+                )
             elif action.category_action_log_prob is not None:
                 action_vector.append(action.category_action_log_prob.unsqueeze(1))
+                action_entropy.append(action.category_action_entropy.unsqueeze(1))
 
             action_indices.append(a_idx)
 
-        return torch.cat(action_vector, dim=1), torch.tensor(
-            action_indices, device=device
+        return (
+            torch.cat(action_vector, dim=1),
+            torch.cat(action_entropy, dim=1),
+            torch.tensor(action_indices, device=device),
         )
 
     def _get_filtered_rewards(self, rewards, action_indices):
@@ -144,7 +197,8 @@ class Trainer:
         self,
         step: int,
         states: List[State],
-        loss: torch.Tensor,
+        values: torch.Tensor,
+        loss: Loss,
         rewards: torch.Tensor,
     ):
         average_score = states[-1].total_score.mean(dim=0).item()
@@ -152,8 +206,12 @@ class Trainer:
         average_reward = rewards.mean().item()
         max_reward = rewards.max().item()
         min_reward = rewards.min().item()
-        loss = loss.item()
+        total_loss = loss.total_loss.item()
+        policy_loss = loss.policy_loss.item()
+        value_loss = loss.value_loss.item()
+        entropy_loss = loss.entropy_loss.item()
         current_lr = self.optimizer.param_groups[0]["lr"]
+        average_value = values.mean().item()
 
         # Update progress bar with metrics
         elapsed = time.time() - self.start_time
@@ -164,17 +222,23 @@ class Trainer:
             "Average Reward": average_reward,
             "Max Reward": max_reward,
             "Min Reward": min_reward,
-            "loss": loss,
+            "Total Loss": total_loss,
+            "Policy Loss": policy_loss,
+            "Value Loss": value_loss,
+            "Entropy Loss": entropy_loss,
             "learning_rate": current_lr,
+            "Average Value": average_value,
         }
 
         wandb.log(log_dict, step=step)
+
         local_log_dict = {
-            "batch": self.model.batch_size,
             "elapsed": f"{elapsed:.2f}s",
-            "lr": f"{current_lr:.6f}",
+            "average_reward": average_reward,
+            "Average Total Score": average_score,
+            "Median Total Score": median_score,
+            "Total Loss": total_loss,
         }
-        local_log_dict.update(log_dict)
 
         self.progress_bar.set_postfix(local_log_dict)
 
@@ -206,6 +270,17 @@ def parse_args():
     parser.add_argument(
         "--step_size", type=int, default=4000, help="Step size for step decay schedule"
     )
+    parser.add_argument(
+        "--disable_wandb",
+        action="store_true",
+        help="Disable Weights & Biases logging",
+    )
+    parser.add_argument(
+        "--entropy_loss_coefficient",
+        type=float,
+        default=0.01,
+        help="Coefficient for entropy regularization",
+    )
 
     args = parser.parse_args()
     return args
@@ -214,7 +289,11 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    with wandb.init(project="yahtzee-rl", config=args):
+    with wandb.init(
+        project="yahtzee-rl",
+        config=args,
+        mode="disabled" if args.disable_wandb else "online",
+    ):
         config = wandb.config
 
         if config.seed is not None:
@@ -229,5 +308,6 @@ if __name__ == "__main__":
             lr_schedule=config.lr_schedule,
             decay_rate=config.decay_rate,
             step_size=config.step_size,
+            entropy_loss_coefficient=config.entropy_loss_coefficient,
         )
         trainer.train()
