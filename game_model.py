@@ -75,7 +75,7 @@ class Yahtzee(torch.nn.Module):
         final_score_reward = torch.zeros_like(total_scores)
         final_score_reward[:, -1] = total_scores[:, -1]
 
-        return score_delta + final_score_reward * 10
+        return score_delta + final_score_reward * 5
 
     def play_round(self, state: State) -> Tuple[List[State], List[Action]]:
         """

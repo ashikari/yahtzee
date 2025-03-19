@@ -116,15 +116,15 @@ class Trainer:
         value_loss = value_loss.sum(dim=1).mean()
 
         # Add a baseline subtraction here
-        advantages = cumulative_rewards - values.detach()
+        advantages = cumulative_rewards.detach() - values.detach()
         # normalize advantages
         advantages = (advantages - advantages.mean(dim=0)) / advantages.std(dim=0)
 
         # Use advantages for policy loss
-        # policy_loss = -action_log_probs * advantages.detach()
-        policy_loss = -action_log_probs * (
-            cumulative_rewards.detach() - cumulative_rewards.mean(dim=0).detach()
-        )
+        policy_loss = -action_log_probs * advantages.detach()
+        # policy_loss = -action_log_probs * (
+        #     cumulative_rewards.detach() - cumulative_rewards.mean(dim=0).detach()
+        # )
         policy_loss = policy_loss.sum(dim=1).mean()
 
         # Add entropy regularization
