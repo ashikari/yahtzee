@@ -147,12 +147,8 @@ class State:
             lower_selected_mask * self.lower_section_current_dice_scores
         )
 
-        # Calculate Yahtzee bonus (50 points for each additional Yahtzee)
-        yahtzee_idx = 5  # Index of Yahtzee in lower section (0-indexed)
-        has_yahtzee_bonus = (
-            self.lower_section_used[:, yahtzee_idx : yahtzee_idx + 1] > 1
-        ) & (self.lower_section_scores[:, yahtzee_idx : yahtzee_idx + 1] > 0)
-        self.lower_bonus = has_yahtzee_bonus.float() * 50
+        # Add 100 points for each additional Yahtzee
+        self.lower_bonus += self._yahtzee_bonus_condition(lower_selected_mask) * 100
 
         # Calculate total lower section score
         self.lower_score = (
@@ -161,6 +157,34 @@ class State:
 
         # Calculate grand total
         self.total_score = self.upper_score + self.lower_score
+
+    def _yahtzee_bonus_condition(
+        self, lower_selected_mask: torch.Tensor
+    ) -> torch.Tensor:
+        # Calculate Yahtzee bonus (100 points for each additional Yahtzee beyond the first)
+        yahtzee_idx = 5  # Index of Yahtzee in lower section (0-indexed)
+
+        # Check if current selection is Yahtzee category
+        is_yahtzee_selected = lower_selected_mask[:, yahtzee_idx : yahtzee_idx + 1] == 1
+
+        # Check if current dice form a Yahtzee
+        has_current_yahtzee = (
+            self.lower_section_current_dice_scores[:, yahtzee_idx : yahtzee_idx + 1] > 0
+        )
+
+        # Check if a Yahtzee was previously scored (with 50 points)
+        has_previous_yahtzee = (
+            self.lower_section_scores[:, yahtzee_idx : yahtzee_idx + 1] == 50
+        )
+
+        # Award bonus only if:
+        # 1. Yahtzee category is selected this turn
+        # 2. Current dice form a Yahtzee
+        # 3. A Yahtzee was previously scored with 50 points
+        yahtzee_bonus_condition = (
+            is_yahtzee_selected & has_current_yahtzee & has_previous_yahtzee
+        )
+        return yahtzee_bonus_condition.float()
 
     def get_feature_vector(self) -> torch.Tensor:
         """

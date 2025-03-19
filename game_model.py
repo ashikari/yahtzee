@@ -28,6 +28,8 @@ class Yahtzee(torch.nn.Module):
         """
         states = []
         actions = []
+        values = []
+
         state = State(self.batch_size, device=self.device)
 
         for round_idx in range(self.num_rounds):
@@ -35,14 +37,16 @@ class Yahtzee(torch.nn.Module):
             state.round_index = torch.full(
                 (self.batch_size, 1), round_idx, device=state.dice_state.device
             )
-            round_states, round_actions = self.play_round(state)
+            round_states, round_actions, round_values = self.play_round(state)
             states.extend(round_states)
             actions.extend(round_actions)
+            values.extend(round_values)
 
         # compute rewards
         rewards = self.compute_rewards(states, actions)
+        values = torch.cat(values, dim=1)
 
-        return states, actions, rewards
+        return states, actions, values, rewards
 
     def compute_rewards(
         self, states: List[State], actions: List[Action]
@@ -91,6 +95,7 @@ class Yahtzee(torch.nn.Module):
         """
         states = []
         actions = []
+        values = []
 
         # first roll
         state = self.roll_dice(state)
@@ -100,17 +105,19 @@ class Yahtzee(torch.nn.Module):
 
         # second and third rolls
         for _ in range(1, 3):
-            a = self.policy_model(state.get_feature_vector())
+            a, value = self.policy_model(state.get_feature_vector())
             state = self.roll_dice(state, a.sample_dice_action())
-            actions.append(a.clone())
-            # TODO: remove this logging outside of debug mode
-            states.append(state.clone())
 
-        a = self.policy_model(state.get_feature_vector())
+            actions.append(a.clone())
+            states.append(state.clone())
+            values.append(value)
+
+        a, value = self.policy_model(state.get_feature_vector())
         state = self.select_categories(state, a)
         actions.append(a.clone())
         states.append(state.clone())
-        return states, actions
+        values.append(value)
+        return states, actions, values
 
     def select_categories(self, state: State, action: Action) -> State:
         """

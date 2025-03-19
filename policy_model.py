@@ -17,11 +17,14 @@ class Action:
     category_action: torch.Tensor
     dice_action_log_prob: torch.Tensor = None
     category_action_log_prob: torch.Tensor = None
+    dice_action_entropy: torch.Tensor = None
+    category_action_entropy: torch.Tensor = None
 
     def sample_dice_action(self):
         distribution = Bernoulli(logits=self.dice_action)
         dice_action_sample = distribution.sample()
         self.dice_action_log_prob = distribution.log_prob(dice_action_sample)
+        self.dice_action_entropy = distribution.entropy()
         return dice_action_sample
 
     def sample_category_action(self, state: State):
@@ -43,6 +46,7 @@ class Action:
         distribution = Categorical(logits=self.category_action)
         category_action_sample = distribution.sample()
         self.category_action_log_prob = distribution.log_prob(category_action_sample)
+        self.category_action_entropy = distribution.entropy()
         return category_action_sample
 
     def clone(self) -> "Action":
@@ -54,6 +58,12 @@ class Action:
             else None,
             category_action_log_prob=self.category_action_log_prob.clone()
             if self.category_action_log_prob is not None
+            else None,
+            dice_action_entropy=self.dice_action_entropy.clone()
+            if self.dice_action_entropy is not None
+            else None,
+            category_action_entropy=self.category_action_entropy.clone()
+            if self.category_action_entropy is not None
             else None,
         )
 
@@ -86,6 +96,9 @@ class PolicyModel(torch.nn.Module):
         self.shared_mlp = MLP(
             [State.get_feature_length(), 128, 128], final_activation=False
         )
+        self.value_mlp = MLP(
+            [State.get_feature_length(), 128, 128, 64, 1], final_activation=False
+        )
         self.dice_mlp = MLP([128, 64, 5], final_activation=False)
         self.category_mlp = MLP([128, 64, 13], final_activation=False)
 
@@ -93,9 +106,10 @@ class PolicyModel(torch.nn.Module):
         shared_embedding = self.shared_mlp(state_vector)
         dice_action = self.dice_mlp(shared_embedding)
         category_action = self.category_mlp(shared_embedding)
+        value = self.value_mlp(state_vector)
 
         # dummy action where the dice are not rolled and the category is random
         return Action(
             dice_action=dice_action,
             category_action=category_action,
-        )
+        ), value
