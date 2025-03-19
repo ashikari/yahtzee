@@ -9,6 +9,10 @@ from typing import List
 
 import argparse
 
+import wandb
+
+wandb.login()
+
 
 class Trainer:
     def __init__(
@@ -21,6 +25,7 @@ class Trainer:
         if device == torch.device("mps:0"):
             print("Compiling model")
             self.model = torch.compile(self.model, backend="aot_eager")
+
         self.num_steps = num_steps
         self.log_interval = log_interval
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.0001)
@@ -33,6 +38,7 @@ class Trainer:
         )
 
     def train(self):
+        wandb.watch(self.model, log="all", log_freq=self.log_interval)
         self.start_time = time.time()
 
         for step in self.progress_bar:
@@ -43,7 +49,7 @@ class Trainer:
             self.optimizer.step()
 
             if step % self.log_interval == 0:
-                self.log(states, loss, rewards)
+                self.log(step, states, loss, rewards)
 
     def compute_loss(self, rewards, actions):
         device = rewards.device
@@ -109,24 +115,38 @@ class Trainer:
 
     def log(
         self,
+        step: int,
         states: List[State],
         loss: torch.Tensor,
         rewards: torch.Tensor,
     ):
         average_score = states[-1].total_score.mean(dim=0).item()
         median_score = states[-1].total_score.median(dim=0).values.item()
+        average_reward = rewards.mean().item()
+        max_reward = rewards.max().item()
+        min_reward = rewards.min().item()
+        loss = loss.item()
+
         # Update progress bar with metrics
         elapsed = time.time() - self.start_time
-        self.progress_bar.set_postfix(
-            {
-                "batch": self.model.batch_size,
-                "elapsed": f"{elapsed:.2f}s",
-                "Average Total Score": average_score,
-                "Median Total Score": median_score,
-                "Average Reward": f"{rewards.mean().item():.2f}",
-                "loss": f"{loss.item():.4f}",
-            }
-        )
+
+        log_dict = {
+            "Average Total Score": average_score,
+            "Median Total Score": median_score,
+            "Average Reward": average_reward,
+            "Max Reward": max_reward,
+            "Min Reward": min_reward,
+            "loss": loss,
+        }
+
+        wandb.log(log_dict, step=step)
+        local_log_dict = {
+            "batch": self.model.batch_size,
+            "elapsed": f"{elapsed:.2f}s",
+        }
+        local_log_dict.update(log_dict)
+
+        self.progress_bar.set_postfix(local_log_dict)
 
 
 def parse_args():
@@ -145,13 +165,16 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    if args.seed is not None:
-        torch.manual_seed(args.seed)
+    with wandb.init(project="yahtzee-rl", config=args):
+        config = wandb.config
 
-    trainer = Trainer(
-        batch_size=args.batch_size,
-        num_steps=args.num_steps,
-        log_interval=25,
-        use_gpu=args.use_gpu,
-    )
-    trainer.train()
+        if config.seed is not None:
+            torch.manual_seed(config.seed)
+
+        trainer = Trainer(
+            batch_size=config.batch_size,
+            num_steps=config.num_steps,
+            log_interval=25,
+            use_gpu=config.use_gpu,
+        )
+        trainer.train()
