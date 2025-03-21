@@ -284,7 +284,7 @@ class State:
         Returns:
             int: The total length of the feature vector
         """
-        # Dice state: 6
+        # Dice state: 5 (not 6, since it's 5 dice)
         # Dice histogram: 6
         # Rolls remaining: 1
         # Round index: 1
@@ -298,4 +298,4 @@ class State:
         # Lower section scores: 7
         # Lower score: 1
         # Total score: 1
-        return 6 + 6 + 1 + 1 + 6 + 6 + 6 + 1 + 1 + 7 + 7 + 7 + 1  # Total: 57
+        return 5 + 6 + 1 + 1 + 6 + 6 + 6 + 1 + 1 + 7 + 7 + 7 + 1 + 1  # Total: 56
