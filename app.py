@@ -167,7 +167,7 @@ def main():
     """
     game_model = Yahtzee(1)
 
-    states, actions, rewards = game_model()
+    states, actions, values, rewards = game_model()
 
     with gr.Blocks() as demo:
         output, next_action_btn = setup_app()
