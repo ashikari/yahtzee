@@ -1,8 +1,10 @@
 # Yahtzee
-Building an On Policy RL algorithm to play Yahtzee
+Building an On-Policy RL Algorithm to play Yahtzee
 
 ## Setup
- - pip install -r requirements.txt
+```
+pip install -r requirements.txt
+```
 
 ## Core Functionality
 ### Training a Model
