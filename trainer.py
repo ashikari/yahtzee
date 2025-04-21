@@ -11,21 +11,17 @@ import argparse
 
 import wandb
 
+from dataclasses import dataclass
+
 wandb.login()
 
 
+@dataclass
 class Loss:
-    def __init__(
-        self,
-        total_loss: torch.Tensor,
-        policy_loss: torch.Tensor,
-        value_loss: torch.Tensor,
-        entropy_loss: torch.Tensor = None,
-    ):
-        self.total_loss = total_loss
-        self.policy_loss = policy_loss
-        self.value_loss = value_loss
-        self.entropy_loss = entropy_loss
+    total_loss: torch.Tensor
+    policy_loss: torch.Tensor
+    value_loss: torch.Tensor
+    entropy_loss: torch.Tensor = None
 
 
 class Trainer:
@@ -42,6 +38,7 @@ class Trainer:
         policy_loss_coefficient: float = 100.0,
         value_loss_coefficient: float = 0.01,
         entropy_loss_coefficient: float = 1,
+        use_learned_value: bool = False,
     ):
         device = torch.device(
             "mps:0" if torch.backends.mps.is_available() and use_gpu else "cpu"
@@ -59,7 +56,7 @@ class Trainer:
         self.value_loss_coefficient = value_loss_coefficient
         self.entropy_loss_coefficient = entropy_loss_coefficient
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=initial_lr)
-
+        self.use_learned_value = use_learned_value
         # Set up learning rate scheduler based on the chosen schedule
         if lr_schedule == "exponential":
             self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
@@ -115,16 +112,16 @@ class Trainer:
         value_loss = huber_loss(values, cumulative_rewards.detach())
         value_loss = value_loss.sum(dim=1).mean()
 
-        # Add a baseline subtraction here
-        advantages = cumulative_rewards.detach() - values.detach()
-        # normalize advantages
-        advantages = (advantages - advantages.mean(dim=0)) / advantages.std(dim=0)
-
         # Use advantages for policy loss
-        policy_loss = -action_log_probs * advantages.detach()
-        # policy_loss = -action_log_probs * (
-        #     cumulative_rewards.detach() - cumulative_rewards.mean(dim=0).detach()
-        # )
+        if self.use_learned_value:
+            advantages = cumulative_rewards.detach() - values.detach()
+            # normalize advantages
+            advantages = (advantages - advantages.mean(dim=0)) / advantages.std(dim=0)
+            policy_loss = -action_log_probs * advantages.detach()
+        else:
+            policy_loss = -action_log_probs * (
+                cumulative_rewards.detach() - cumulative_rewards.mean(dim=0).detach()
+            )
         policy_loss = policy_loss.sum(dim=1).mean()
 
         # Add entropy regularization
@@ -293,6 +290,11 @@ def parse_args():
         default=1,
         help="Coefficient for entropy regularization",
     )
+    parser.add_argument(
+        "--use_learned_value",
+        action="store_true",
+        help="Use learned value estimation instead of Monte Carlo returns",
+    )
 
     args = parser.parse_args()
     return args
@@ -321,5 +323,6 @@ if __name__ == "__main__":
             decay_rate=config.decay_rate,
             step_size=config.step_size,
             entropy_loss_coefficient=config.entropy_loss_coefficient,
+            use_learned_value=config.use_learned_value,
         )
         trainer.train()
