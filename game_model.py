@@ -19,12 +19,16 @@ class Yahtzee(torch.nn.Module):
         # initialize policy model
         self.policy_model = PolicyModel().to(self.device)
 
-    def forward(self) -> Tuple[List[State], List[Action]]:
+    def forward(self) -> Tuple[List[State], List[Action], torch.Tensor, torch.Tensor]:
         """
         Plays the entire game of Yahtzee.
 
         Returns:
-            Tuple[List[State], List[Action]]: A tuple of a list of states representing each step in the round and a list of actions taken
+            Tuple[List[State], List[Action], torch.Tensor, torch.Tensor]: A tuple containing:
+                - List of states representing each step in the game
+                - List of actions taken
+                - Values tensor
+                - Rewards tensor
         """
         states = []
         actions = []
