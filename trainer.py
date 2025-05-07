@@ -39,6 +39,7 @@ class Trainer:
         value_loss_coefficient: float = 0.01,
         entropy_loss_coefficient: float = 1,
         use_learned_value: bool = False,
+        a2c: bool = False,
     ):
         device = torch.device(
             "mps:0" if torch.backends.mps.is_available() and use_gpu else "cpu"
@@ -57,6 +58,7 @@ class Trainer:
         self.entropy_loss_coefficient = entropy_loss_coefficient
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=initial_lr)
         self.use_learned_value = use_learned_value
+        self.a2c = a2c
         # Set up learning rate scheduler based on the chosen schedule
         if lr_schedule == "exponential":
             self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
@@ -105,6 +107,7 @@ class Trainer:
         filtered_rewards = self._get_filtered_rewards(rewards, action_indices)
 
         # Compute cumulative future rewards
+        # shape: (batch_size, num_steps)
         cumulative_rewards = self._compute_cumulative_rewards(filtered_rewards)
 
         # Value loss calculation using PyTorch's built-in Huber loss
@@ -115,6 +118,14 @@ class Trainer:
         # Use advantages for policy loss
         if self.use_learned_value:
             advantages = cumulative_rewards.detach() - values.detach()
+            # normalize advantages
+            advantages = (advantages - advantages.mean(dim=0)) / advantages.std(dim=0)
+            policy_loss = -action_log_probs * advantages.detach()
+        elif self.a2c:
+            # set the last value of s_t+1 to 0
+            next_tick_values = torch.zeros_like(values)
+            next_tick_values[:, :-1] = values[:, 1:].detach()
+            advantages = filtered_rewards.detach() + next_tick_values - values.detach()
             # normalize advantages
             advantages = (advantages - advantages.mean(dim=0)) / advantages.std(dim=0)
             policy_loss = -action_log_probs * advantages.detach()
@@ -143,6 +154,7 @@ class Trainer:
 
     def _extract_action_probs_and_entropy(self, actions, device=torch.device("cpu")):
         """Extract log probabilities from valid actions and track their indices."""
+        # TODO: Make this function more efficient by pre-computing the action indices
         action_vector = []
         action_entropy = []
         action_indices = []
@@ -293,7 +305,12 @@ def parse_args():
     parser.add_argument(
         "--use_learned_value",
         action="store_true",
-        help="Use learned value estimation instead of Monte Carlo returns",
+        help="Use learned value estimation as a baseline instead of average Monte Carlo returns",
+    )
+    parser.add_argument(
+        "--a2c",
+        action="store_true",
+        help="Use a single sample next step value estimate to compute the advantage",
     )
 
     args = parser.parse_args()
