@@ -112,13 +112,13 @@ class Yahtzee(torch.nn.Module):
             a, value = self.policy_model(state.get_feature_vector())
             state = self.roll_dice(state, a.sample_dice_action())
 
-            actions.append(a.clone())
+            actions.append(a)
             states.append(state.clone())
             values.append(value)
 
         a, value = self.policy_model(state.get_feature_vector())
         state = self.select_categories(state, a)
-        actions.append(a.clone())
+        actions.append(a)
         states.append(state.clone())
         values.append(value)
         return states, actions, values
