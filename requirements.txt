@@ -1,6 +1,9 @@
 # Numerical and Scientific Computing
 numpy>=2.2.1
 pandas>=2.2.3
+wandb==0.19.8
+torch==2.5.1
+
 
 # UI Dependencies (assuming you'll use tkinter which comes with Python)
 

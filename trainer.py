@@ -113,6 +113,8 @@ class Trainer:
         # Value loss calculation using PyTorch's built-in Huber loss
         huber_loss = torch.nn.HuberLoss(reduction="none")
         value_loss = huber_loss(values, cumulative_rewards.detach())
+        # mse_loss = torch.nn.MSELoss(reduction="none")
+        # value_loss = mse_loss(values, cumulative_rewards.detach())
         value_loss = value_loss.sum(dim=1).mean()
 
         # Use advantages for policy loss

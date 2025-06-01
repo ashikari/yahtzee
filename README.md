@@ -2,9 +2,14 @@
 Building an On-Policy RL Algorithm to play Yahtzee
 
 ## Setup
+
+# install requirements
 ```
 pip install -r requirements.txt
 ```
+# set up weights and biases account using the quickstart page:
+https://docs.wandb.ai/quickstart/
+
 
 ## Core Functionality
 ### Training a Model
@@ -29,6 +34,7 @@ python trainer.py \
     --policy_loss_coefficient 100.0 \
     --value_loss_coefficient 0.01 \
     --entropy_loss_coefficient 1.0 \
+    --use_learned_value
 ```
 
 ## Example Runs
